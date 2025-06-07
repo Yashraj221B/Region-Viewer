@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KML Region Animator - Full Screen</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            background: #fff;
+            overflow: hidden;
+        }
+        
+        #map {
+            height: 100vh;
+            width: 100vw;
+        }
+        
+        .controls {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 15px;
+            border-radius: 10px;
+            z-index: 1000;
+            display: flex;
+            gap: 10px;
+            border: 1px solid #ddd;
+        }
+        
+        .btn {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s;
+            color: white;
+            font-weight: bold;
+        }
+        
+        .btn-primary {
+            background: #28a745;
+        }
+        
+        .btn-primary:hover {
+            background: #1e7e34;
+            transform: scale(1.05);
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+        }
+        
+        .btn-secondary:hover {
+            background: #545b62;
+            transform: scale(1.05);
+        }
+        
+        .btn:disabled {
+            background: #444;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .settings {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 15px;
+            border-radius: 10px;
+            z-index: 1000;
+            color: #333;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            border: 1px solid #ddd;
+        }
+        
+        .setting-group {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .setting-group label {
+            font-weight: bold;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+        
+        .setting-group input, .setting-group select {
+            padding: 5px;
+            border: 1px solid #555;
+            border-radius: 3px;
+            background: rgba(255, 255, 255, 0.9);
+            font-size: 11px;
+        }
+        
+        .status {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            z-index: 1000;
+            color: white;
+            font-size: 14px;
+            min-width: 200px;
+        }
+        
+        .current-region-display {
+            position: fixed;
+            top: 60px;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px 40px;
+            border-radius: 15px;
+            z-index: 1500;
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            border: 2px solid #007bff;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            display: none;
+        }
+        
+        .current-region-display.show {
+            display: block;
+            animation: fadeInScale 0.3s ease-out;
+        }
+        
+        @keyframes fadeInScale {
+            from {
+                opacity: 0;
+                transform: translate(-50%, -50%) scale(0.8);
+            }
+            to {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1);
+            }
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #007bff, #28a745);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        
+        .loading {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            z-index: 2000;
+            text-align: center;
+            font-size: 18px;
+        }
+        
+        .loading.hidden {
+            display: none;
+        }
+        
+        /* Custom popup styles for region names */
+        .leaflet-popup-content-wrapper {
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            border-radius: 8px;
+            font-weight: bold;
+        }
+        
+        .leaflet-popup-content {
+            margin: 10px 15px;
+            font-size: 14px;
+        }
+        
+        .leaflet-popup-tip {
+            background: rgba(0, 0, 0, 0.8);
+        }
+        
+        /* Region label styles */
+        .region-label {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 12px;
+            border: 1px solid #333;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .region-label.hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading" class="loading">
+        <div>Loading KML Regions...</div>
+        <div style="margin-top: 10px; font-size: 14px;">Please wait while regions are loaded</div>
+    </div>
+    
+    <div class="settings">
+        <div class="setting-group">
+            <label>Speed:</label>
+            <select id="blinkSpeed">
+                <option value="500">Fast</option>
+                <option value="1000" selected>Normal</option>
+                <option value="1500">Slow</option>
+            </select>
+        </div>
+        
+        <div class="setting-group">
+            <label>Duration:</label>
+            <select id="holdDuration">
+                <option value="2000" selected>2s</option>
+                <option value="3000">3s</option>
+                <option value="5000">5s</option>
+            </select>
+        </div>
+        
+        <div class="setting-group">
+            <label>Color:</label>
+            <input type="color" id="highlightColor" value="#ff0000">
+        </div>
+    </div>
+    
+    <div class="controls">
+        <button id="startAnimation" class="btn btn-primary">▶️ Start</button>
+        <button id="stopAnimation" class="btn btn-secondary" disabled>⏹️ Stop</button>
+        <button id="resetView" class="btn btn-secondary">🔄 Reset</button>
+    </div>
+    
+    <div id="map"></div>
+    
+    <div id="currentRegionDisplay" class="current-region-display"></div>
+    
+    <div class="status">
+        <div><strong>Regions:</strong> <span id="regionCount">0</span></div>
+        <div><strong>Current:</strong> <span id="currentRegion">Loading...</span></div>
+        <div class="progress-bar">
+            <div class="progress-fill" id="progressFill"></div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        class KMLRegionAnimator {
+            constructor() {
+                this.map = null;
+                this.regions = [];
+                this.regionLabels = [];
+                this.currentAnimation = null;
+                this.isAnimating = false;
+                this.currentRegionIndex = -1;
+                
+                // UPDATE THESE PATHS TO MATCH YOUR KML FILES
+                this.kmlFilePaths = [
+                    "Bavdhan.kml",
+                    "Bhosari.kml",
+                    "Chakan.kml",
+                    "Chinchwad.kml",
+                    "Dehuroad.kml",
+                    "DighiAlandi.kml",
+                    "Hinjewadi.kml",
+                    "Mahalunge.kml",
+                    "Nigdi.kml",
+                    "Pimpri.kml",
+                    "Sangvi.kml",
+                    "Talegaon.kml",
+                    "Talwade.kml",
+                    "Wakad.kml",
+                ];
+                
+                this.initMap();
+                this.bindEvents();
+                this.loadAllKMLFiles();
+            }
+            
+            initMap() {
+                this.map = L.map('map', {
+                    zoomControl: false,
+                    attributionControl: false
+                }).setView([20, 0], 2);
+                
+                // Normal OpenStreetMap tiles
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors',
+                    maxZoom: 19
+                }).addTo(this.map);
+            }
+            
+            bindEvents() {
+                document.getElementById('startAnimation').addEventListener('click', () => {
+                    this.startAnimation();
+                });
+                
+                document.getElementById('stopAnimation').addEventListener('click', () => {
+                    this.stopAnimation();
+                });
+                
+                document.getElementById('resetView').addEventListener('click', () => {
+                    this.resetView();
+                });
+            }
+            
+            async loadAllKMLFiles() {
+                this.regions = [];
+                this.clearMap();
+                
+                for (let i = 0; i < this.kmlFilePaths.length; i++) {
+                    try {
+                        const response = await fetch(this.kmlFilePaths[i]);
+                        if (response.ok) {
+                            const kmlText = await response.text();
+                            const regions = this.parseKML(kmlText, `Region ${i + 1}`);
+                            this.regions.push(...regions);
+                        } else {
+                            console.warn(`Could not load ${this.kmlFilePaths[i]}`);
+                            // Create a placeholder region
+                            this.regions.push({
+                                name: `Region ${i + 1}`,
+                                filename: this.kmlFilePaths[i],
+                                coordinates: [],
+                                layer: null,
+                                originalStyle: {
+                                    color: '#3388ff',
+                                    weight: 3,
+                                    opacity: 0.8,
+                                    fillOpacity: 0.1
+                                }
+                            });
+                        }
+                    } catch (error) {
+                        console.error(`Error loading ${this.kmlFilePaths[i]}:`, error);
+                    }
+                }
+                
+                this.displayRegions();
+                this.updateUI();
+                this.hideLoading();
+            }
+            
+            parseKML(kmlText, defaultName) {
+                const parser = new DOMParser();
+                const kmlDoc = parser.parseFromString(kmlText, 'text/xml');
+                const regions = [];
+                
+                const placemarks = kmlDoc.getElementsByTagName('Placemark');
+                
+                if (placemarks.length === 0) {
+                    return [{
+                        name: defaultName,
+                        filename: '',
+                        coordinates: [],
+                        layer: null,
+                        originalStyle: {
+                            color: '#3388ff',
+                            weight: 3,
+                            opacity: 0.8,
+                            fillOpacity: 0.1
+                        }
+                    }];
+                }
+                
+                for (let i = 0; i < placemarks.length; i++) {
+                    const placemark = placemarks[i];
+                    const name = placemark.getElementsByTagName('name')[0]?.textContent || defaultName;
+                    
+                    const coordinates = this.extractCoordinates(placemark);
+                    
+                    regions.push({
+                        name: name,
+                        filename: '',
+                        coordinates: coordinates,
+                        layer: null,
+                        originalStyle: {
+                            color: '#3388ff',
+                            weight: 3,
+                            opacity: 0.8,
+                            fillOpacity: 0.1
+                        }
+                    });
+                }
+                
+                return regions;
+            }
+            
+            extractCoordinates(placemark) {
+                const coordinates = [];
+                
+                // Check for Polygon
+                const polygons = placemark.getElementsByTagName('Polygon');
+                for (let polygon of polygons) {
+                    const outerBoundary = polygon.getElementsByTagName('outerBoundaryIs')[0];
+                    if (outerBoundary) {
+                        const linearRing = outerBoundary.getElementsByTagName('LinearRing')[0];
+                        if (linearRing) {
+                            const coordsText = linearRing.getElementsByTagName('coordinates')[0]?.textContent;
+                            if (coordsText) {
+                                const coords = this.parseCoordinateString(coordsText);
+                                if (coords.length > 0) {
+                                    coordinates.push(coords);
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Check for LineString
+                const lineStrings = placemark.getElementsByTagName('LineString');
+                for (let lineString of lineStrings) {
+                    const coordsText = lineString.getElementsByTagName('coordinates')[0]?.textContent;
+                    if (coordsText) {
+                        const coords = this.parseCoordinateString(coordsText);
+                        if (coords.length > 0) {
+                            coordinates.push(coords);
+                        }
+                    }
+                }
+                
+                return coordinates;
+            }
+            
+            parseCoordinateString(coordsText) {
+                return coordsText.trim().split(/\s+/).map(coord => {
+                    const parts = coord.split(',');
+                    if (parts.length >= 2) {
+                        const lng = parseFloat(parts[0]);
+                        const lat = parseFloat(parts[1]);
+                        if (!isNaN(lat) && !isNaN(lng)) {
+                            return [lat, lng];
+                        }
+                    }
+                    return null;
+                }).filter(coord => coord !== null);
+            }
+            
+            displayRegions() {
+                this.clearLabels();
+                
+                this.regions.forEach((region, index) => {
+                    if (region.coordinates.length > 0) {
+                        // Create polygon or polyline
+                        if (region.coordinates[0].length > 2) {
+                            region.layer = L.polygon(region.coordinates, region.originalStyle).addTo(this.map);
+                        } else {
+                            region.layer = L.polyline(region.coordinates, region.originalStyle).addTo(this.map);
+                        }
+                        
+                        // Add permanent label
+                        this.addRegionLabel(region);
+                    }
+                });
+                
+                // Fit map to show all regions
+                if (this.regions.length > 0) {
+                    const validLayers = this.regions.map(r => r.layer).filter(l => l);
+                    if (validLayers.length > 0) {
+                        const group = new L.featureGroup(validLayers);
+                        this.map.fitBounds(group.getBounds().pad(0.1));
+                    }
+                }
+            }
+            
+            addRegionLabel(region) {
+                if (!region.layer) return;
+                
+                let center;
+                if (region.layer instanceof L.Polygon) {
+                    center = region.layer.getBounds().getCenter();
+                } else if (region.layer instanceof L.Polyline) {
+                    const coords = region.layer.getLatLngs();
+                    const midIndex = Math.floor(coords.length / 2);
+                    center = coords[midIndex];
+                }
+                
+                if (center) {
+                    const label = L.marker(center, {
+                        icon: L.divIcon({
+                            className: 'region-label',
+                            html: region.name,
+                            iconSize: [null, null],
+                            iconAnchor: [null, null]
+                        })
+                    }).addTo(this.map);
+                    
+                    this.regionLabels.push(label);
+                }
+            }
+            
+            clearMap() {
+                this.map.eachLayer((layer) => {
+                    if (layer instanceof L.Polygon || layer instanceof L.Polyline || layer instanceof L.Marker) {
+                        if (!layer.options.attribution) { // Don't remove tile layer
+                            this.map.removeLayer(layer);
+                        }
+                    }
+                });
+                this.clearLabels();
+            }
+            
+            clearLabels() {
+                this.regionLabels.forEach(label => {
+                    this.map.removeLayer(label);
+                });
+                this.regionLabels = [];
+            }
+            
+            hideLabels() {
+                this.regionLabels.forEach(label => {
+                    label.getElement().classList.add('hidden');
+                });
+            }
+            
+            showRegionLabel(regionName) {
+                const display = document.getElementById('currentRegionDisplay');
+                display.textContent = regionName;
+                display.classList.add('show');
+            }
+            
+            hideRegionLabel() {
+                const display = document.getElementById('currentRegionDisplay');
+                display.classList.remove('show');
+            }
+            
+            updateUI() {
+                document.getElementById('regionCount').textContent = this.regions.length;
+                document.getElementById('startAnimation').disabled = this.regions.length === 0 || this.isAnimating;
+                document.getElementById('stopAnimation').disabled = !this.isAnimating;
+                
+                if (!this.isAnimating) {
+                    document.getElementById('currentRegion').textContent = 'Ready';
+                }
+            }
+            
+            hideLoading() {
+                document.getElementById('loading').classList.add('hidden');
+            }
+            
+            async startAnimation() {
+                if (this.isAnimating || this.regions.length === 0) return;
+                
+                this.isAnimating = true;
+                this.hideLabels(); // Hide labels during animation
+                this.updateUI();
+                
+                const blinkSpeed = parseInt(document.getElementById('blinkSpeed').value);
+                const holdDuration = parseInt(document.getElementById('holdDuration').value);
+                const highlightColor = document.getElementById('highlightColor').value;
+                const lineWidth = 6; // Thicker lines for animation
+                
+                const validRegions = this.regions.filter(r => r.layer);
+                const totalSteps = validRegions.length + 1;
+                
+                // Animate each region individually
+                for (let i = 0; i < validRegions.length; i++) {
+                    if (!this.isAnimating) break;
+                    
+                    this.currentRegionIndex = i;
+                    document.getElementById('currentRegion').textContent = validRegions[i].name;
+                    this.showRegionLabel(validRegions[i].name);
+                    
+                    const progress = ((i + 1) / totalSteps) * 100;
+                    document.getElementById('progressFill').style.width = `${progress}%`;
+                    
+                    await this.blinkRegion(validRegions[i], blinkSpeed, holdDuration, highlightColor, lineWidth);
+                }
+                
+                // Final animation: all regions together
+                if (this.isAnimating) {
+                    document.getElementById('currentRegion').textContent = 'All Regions';
+                    this.showRegionLabel('All Regions Together');
+                    document.getElementById('progressFill').style.width = '100%';
+                    
+                    await this.blinkAllRegions(blinkSpeed, holdDuration * 2, highlightColor, lineWidth);
+                }
+                
+                this.stopAnimation();
+            }
+            
+            async blinkRegion(region, blinkSpeed, holdDuration, highlightColor, lineWidth) {
+                if (!region.layer) return;
+                
+                const originalStyle = region.originalStyle;
+                const highlightStyle = {
+                    color: highlightColor,
+                    weight: lineWidth,
+                    opacity: 1,
+                    fillOpacity: 0.4
+                };
+                
+                const blinkCount = Math.floor(holdDuration / blinkSpeed);
+                for (let i = 0; i < blinkCount && this.isAnimating; i++) {
+                    region.layer.setStyle(highlightStyle);
+                    await this.sleep(blinkSpeed / 2);
+                    
+                    if (this.isAnimating) {
+                        region.layer.setStyle(originalStyle);
+                        await this.sleep(blinkSpeed / 2);
+                    }
+                }
+                
+                if (this.isAnimating) {
+                    region.layer.setStyle(highlightStyle);
+                    await this.sleep(holdDuration % blinkSpeed);
+                    region.layer.setStyle(originalStyle);
+                }
+            }
+            
+            async blinkAllRegions(blinkSpeed, holdDuration, highlightColor, lineWidth) {
+                const highlightStyle = {
+                    color: highlightColor,
+                    weight: lineWidth,
+                    opacity: 1,
+                    fillOpacity: 0.4
+                };
+                
+                const validRegions = this.regions.filter(r => r.layer);
+                const blinkCount = Math.floor(holdDuration / blinkSpeed);
+                
+                for (let i = 0; i < blinkCount && this.isAnimating; i++) {
+                    validRegions.forEach(region => {
+                        region.layer.setStyle(highlightStyle);
+                    });
+                    await this.sleep(blinkSpeed / 2);
+                    
+                    if (this.isAnimating) {
+                        validRegions.forEach(region => {
+                            region.layer.setStyle(region.originalStyle);
+                        });
+                        await this.sleep(blinkSpeed / 2);
+                    }
+                }
+                
+                if (this.isAnimating) {
+                    validRegions.forEach(region => {
+                        region.layer.setStyle(highlightStyle);
+                    });
+                    await this.sleep(holdDuration % blinkSpeed);
+                    validRegions.forEach(region => {
+                        region.layer.setStyle(region.originalStyle);
+                    });
+                }
+            }
+            
+            stopAnimation() {
+                this.isAnimating = false;
+                this.currentRegionIndex = -1;
+                
+                // Reset all styles
+                this.regions.forEach(region => {
+                    if (region.layer) {
+                        region.layer.setStyle(region.originalStyle);
+                    }
+                });
+                
+                // Show labels again
+                this.showLabels();
+                this.hideRegionLabel();
+                
+                // Reset UI
+                document.getElementById('currentRegion').textContent = 'Ready';
+                document.getElementById('progressFill').style.width = '0%';
+                
+                this.updateUI();
+            }
+            
+            showLabels() {
+                this.regionLabels.forEach(label => {
+                    label.getElement().classList.remove('hidden');
+                });
+            }
+            
+            resetView() {
+                const validLayers = this.regions.map(r => r.layer).filter(l => l);
+                if (validLayers.length > 0) {
+                    const group = new L.featureGroup(validLayers);
+                    this.map.fitBounds(group.getBounds().pad(0.1));
+                } else {
+                    this.map.setView([20, 0], 2);
+                }
+            }
+            
+            sleep(ms) {
+                return new Promise(resolve => setTimeout(resolve, ms));
+            }
+        }
+        
+        // Initialize the application
+        const animator = new KMLRegionAnimator();
+    </script>
+</body>
+</html>
