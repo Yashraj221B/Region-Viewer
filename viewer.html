@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KML Region Animator</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background: #f0f0f0;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+        
+        .container.fullscreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            max-width: none;
+            margin: 0;
+            border-radius: 0;
+            z-index: 1000;
+            background: white;
+            padding: 10px;
+        }
+        
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        
+        .file-input-container {
+            position: relative;
+            display: inline-block;
+        }
+        
+        .file-input {
+            position: absolute;
+            left: -9999px;
+        }
+        
+        .file-label {
+            display: inline-block;
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        .file-label:hover {
+            background: #0056b3;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+        
+        .btn-primary {
+            background: #28a745;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #1e7e34;
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+        
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .settings {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .setting-group {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .setting-group label {
+            font-weight: bold;
+        }
+        
+        .setting-group input, .setting-group select {
+            padding: 5px;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+        }
+        
+        #map {
+            height: 600px;
+            width: 100%;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            position: relative;
+        }
+        
+        .fullscreen #map {
+            height: calc(100vh - 200px);
+            border-radius: 0;
+        }
+        
+        .region-name-overlay {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 24px;
+            font-weight: bold;
+            z-index: 1000;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            opacity: 0;
+            transition: all 0.3s ease;
+            pointer-events: none;
+        }
+        
+        .region-name-overlay.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+        
+        .region-name-overlay.hide {
+            opacity: 0;
+            transform: translateX(-50%) translateY(-10px);
+        }
+        
+        .fullscreen-toggle {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1001;
+            background: rgba(255, 255, 255, 0.9);
+            border: none;
+            border-radius: 5px;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 16px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        
+        .fullscreen-toggle:hover {
+            background: white;
+        }
+        
+        .status {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        
+        .status h3 {
+            margin: 0 0 10px 0;
+            color: #495057;
+        }
+        
+        .region-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .region-item {
+            background: #f8f9fa;
+            padding: 8px;
+            border-radius: 4px;
+            border-left: 3px solid #007bff;
+            font-size: 12px;
+        }
+        
+        .region-item.active {
+            background: #fff3cd;
+            border-left-color: #ffc107;
+            animation: pulse 0.5s ease-in-out infinite alternate;
+        }
+        
+        @keyframes pulse {
+            from { opacity: 1; }
+            to { opacity: 0.7; }
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #007bff, #28a745);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        
+        .instructions {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .instructions h3 {
+            margin: 0 0 10px 0;
+            color: #155724;
+        }
+        
+        .instructions ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        
+        .instructions li {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🗺️ KML Region Animator</h1>
+        
+        <div class="instructions">
+            <h3>📋 Instructions:</h3>
+            <ul>
+                <li>Upload your KML files containing the 14 regions OR try the demo files</li>
+                <li>Adjust animation settings (blink speed, duration, colors)</li>
+                <li>Use fullscreen mode for better video recording</li>
+                <li>Click "Start Animation" to begin the sequence</li>
+                <li>Each region will blink/highlight with name display, then all regions together</li>
+                <li>Perfect for screen recording for your video!</li>
+            </ul>
+        </div>
+        
+        <div class="controls">
+            <div class="file-input-container">
+                <input type="file" id="kmlFiles" class="file-input" multiple accept=".kml,.kmz">
+                <label for="kmlFiles" class="file-label">📁 Upload KML Files</label>
+            </div>
+            
+            <button id="startAnimation" class="btn btn-primary" disabled>▶️ Start Animation</button>
+            <button id="stopAnimation" class="btn btn-secondary" disabled>⏹️ Stop Animation</button>
+            <button id="resetView" class="btn btn-secondary">🔄 Reset View</button>
+        </div>
+        
+        <div class="settings">
+            <div class="setting-group">
+                <label>Blink Speed:</label>
+                <select id="blinkSpeed">
+                    <option value="500">Fast (0.5s)</option>
+                    <option value="1000" selected>Normal (1s)</option>
+                    <option value="1500">Slow (1.5s)</option>
+                    <option value="2000">Very Slow (2s)</option>
+                </select>
+            </div>
+            
+            <div class="setting-group">
+                <label>Hold Duration:</label>
+                <select id="holdDuration">
+                    <option value="1000">1 second</option>
+                    <option value="2000" selected>2 seconds</option>
+                    <option value="3000">3 seconds</option>
+                    <option value="5000">5 seconds</option>
+                </select>
+            </div>
+            
+            <div class="setting-group">
+                <label>Highlight Color:</label>
+                <input type="color" id="highlightColor" value="#ff0000">
+            </div>
+            
+            <div class="setting-group">
+                <label>Line Width:</label>
+                <input type="range" id="lineWidth" min="2" max="10" value="4">
+                <span id="lineWidthValue">4</span>
+            </div>
+        </div>
+        
+        <div id="map">
+            <div class="region-name-overlay" id="regionNameOverlay"></div>
+            <button class="fullscreen-toggle" id="fullscreenToggle" title="Toggle Fullscreen">⛶</button>
+        </div>
+        
+        <div class="status">
+            <h3>📊 Status</h3>
+            <div>Loaded Regions: <span id="regionCount">0</span></div>
+            <div>Current Animation: <span id="currentRegion">None</span></div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            
+            <div class="region-list" id="regionList"></div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        class KMLRegionAnimator {
+            constructor() {
+                this.map = null;
+                this.regions = [];
+                this.currentAnimation = null;
+                this.isAnimating = false;
+                this.currentRegionIndex = -1;
+                this.isFullscreen = false;
+                
+                this.initMap();
+                this.bindEvents();
+                this.createDemoData();
+            }
+            
+            createDemoData() {
+                // Sample city regions for demonstration
+                this.demoRegions = [
+                    {
+                        name: "Downtown District",
+                        coordinates: [[[40.7589, -73.9851], [40.7614, -73.9776], [40.7505, -73.9738], [40.7480, -73.9813], [40.7589, -73.9851]]]
+                    },
+                    {
+                        name: "Financial Quarter", 
+                        coordinates: [[[40.7505, -73.9738], [40.7614, -73.9776], [40.7097, -74.0132], [40.7047, -74.0170], [40.7505, -73.9738]]]
+                    },
+                    {
+                        name: "Arts & Culture Zone",
+                        coordinates: [[[40.7614, -73.9776], [40.7589, -73.9851], [40.7730, -73.9803], [40.7755, -73.9728], [40.7614, -73.9776]]]
+                    },
+                    {
+                        name: "Riverside Park Area",
+                        coordinates: [[[40.7755, -73.9728], [40.7730, -73.9803], [40.7851, -73.9755], [40.7876, -73.9680], [40.7755, -73.9728]]]
+                    },
+                    {
+                        name: "Historic Old Town",
+                        coordinates: [[[40.7480, -73.9813], [40.7505, -73.9738], [40.7396, -73.9700], [40.7371, -73.9775], [40.7480, -73.9813]]]
+                    },
+                    {
+                        name: "University District",
+                        coordinates: [[[40.7371, -73.9775], [40.7396, -73.9700], [40.7287, -73.9662], [40.7262, -73.9737], [40.7371, -73.9775]]]
+                    },
+                    {
+                        name: "Shopping Center",
+                        coordinates: [[[40.7876, -73.9680], [40.7851, -73.9755], [40.7972, -73.9707], [40.7997, -73.9632], [40.7876, -73.9680]]]
+                    },
+                    {
+                        name: "Medical Center",
+                        coordinates: [[[40.7262, -73.9737], [40.7287, -73.9662], [40.7178, -73.9624], [40.7153, -73.9699], [40.7262, -73.9737]]]
+                    },
+                    {
+                        name: "Tech Hub",
+                        coordinates: [[[40.7997, -73.9632], [40.7972, -73.9707], [40.8093, -73.9659], [40.8118, -73.9584], [40.7997, -73.9632]]]
+                    },
+                    {
+                        name: "Green Valley",
+                        coordinates: [[[40.7153, -73.9699], [40.7178, -73.9624], [40.7069, -73.9586], [40.7044, -73.9661], [40.7153, -73.9699]]]
+                    },
+                    {
+                        name: "Industrial Zone",
+                        coordinates: [[[40.8118, -73.9584], [40.8093, -73.9659], [40.8214, -73.9611], [40.8239, -73.9536], [40.8118, -73.9584]]]
+                    },
+                    {
+                        name: "Suburban Heights",
+                        coordinates: [[[40.7044, -73.9661], [40.7069, -73.9586], [40.6960, -73.9548], [40.6935, -73.9623], [40.7044, -73.9661]]]
+                    },
+                    {
+                        name: "Lakefront District",
+                        coordinates: [[[40.8239, -73.9536], [40.8214, -73.9611], [40.8335, -73.9563], [40.8360, -73.9488], [40.8239, -73.9536]]]
+                    },
+                    {
+                        name: "Mountain View",
+                        coordinates: [[[40.6935, -73.9623], [40.6960, -73.9548], [40.6851, -73.9510], [40.6826, -73.9585], [40.6935, -73.9623]]]
+                    }
+                ];
+            }
+            
+            loadDemoRegions() {
+                this.regions = [];
+                this.clearMap();
+                
+                this.demoRegions.forEach((demoRegion, index) => {
+                    this.regions.push({
+                        name: demoRegion.name,
+                        filename: 'demo-data.kml',
+                        coordinates: demoRegion.coordinates,
+                        layer: null,
+                        originalStyle: {
+                            color: '#3388ff',
+                            weight: 2,
+                            opacity: 0.8,
+                            fillOpacity: 0.1
+                        }
+                    });
+                });
+                
+                this.displayRegions();
+                this.updateUI();
+            }
+            
+            toggleFullscreen() {
+                const container = document.querySelector('.container');
+                const toggleBtn = document.getElementById('fullscreenToggle');
+                
+                if (!this.isFullscreen) {
+                    container.classList.add('fullscreen');
+                    toggleBtn.innerHTML = '⛶';
+                    toggleBtn.title = 'Exit Fullscreen';
+                    this.isFullscreen = true;
+                } else {
+                    container.classList.remove('fullscreen');
+                    toggleBtn.innerHTML = '⛶';
+                    toggleBtn.title = 'Enter Fullscreen';
+                    this.isFullscreen = false;
+                }
+                
+                // Invalidate map size after fullscreen toggle
+                setTimeout(() => {
+                    this.map.invalidateSize();
+                }, 100);
+            }
+            
+            showRegionName(regionName, isVisible = true) {
+                const overlay = document.getElementById('regionNameOverlay');
+                if (isVisible && regionName) {
+                    overlay.textContent = regionName;
+                    overlay.classList.remove('hide');
+                    overlay.classList.add('show');
+                } else {
+                    overlay.classList.remove('show');
+                    overlay.classList.add('hide');
+                }
+            }
+            
+            initMap() {
+                this.map = L.map('map').setView([20, 0], 2);
+                
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors'
+                }).addTo(this.map);
+            }
+            
+            bindEvents() {
+                document.getElementById('kmlFiles').addEventListener('change', (e) => {
+                    this.loadKMLFiles(e.target.files);
+                });
+                
+                document.getElementById('loadDemo').addEventListener('click', () => {
+                    this.loadDemoRegions();
+                });
+                
+                document.getElementById('startAnimation').addEventListener('click', () => {
+                    this.startAnimation();
+                });
+                
+                document.getElementById('stopAnimation').addEventListener('click', () => {
+                    this.stopAnimation();
+                });
+                
+                document.getElementById('resetView').addEventListener('click', () => {
+                    this.resetView();
+                });
+                
+                document.getElementById('fullscreenToggle').addEventListener('click', () => {
+                    this.toggleFullscreen();
+                });
+                
+                document.getElementById('lineWidth').addEventListener('input', (e) => {
+                    document.getElementById('lineWidthValue').textContent = e.target.value;
+                });
+                
+                // Escape key to exit fullscreen
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape' && this.isFullscreen) {
+                        this.toggleFullscreen();
+                    }
+                });
+            }
+            
+            async loadKMLFiles(files) {
+                this.regions = [];
+                this.clearMap();
+                
+                for (let file of files) {
+                    try {
+                        const kmlText = await this.readFile(file);
+                        const regions = this.parseKML(kmlText, file.name);
+                        this.regions.push(...regions);
+                    } catch (error) {
+                        console.error(`Error loading ${file.name}:`, error);
+                    }
+                }
+                
+                this.displayRegions();
+                this.updateUI();
+            }
+            
+            readFile(file) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => resolve(e.target.result);
+                    reader.onerror = reject;
+                    reader.readAsText(file);
+                });
+            }
+            
+            parseKML(kmlText, filename) {
+                const parser = new DOMParser();
+                const kmlDoc = parser.parseFromString(kmlText, 'text/xml');
+                const regions = [];
+                
+                // Parse Placemarks
+                const placemarks = kmlDoc.getElementsByTagName('Placemark');
+                
+                for (let i = 0; i < placemarks.length; i++) {
+                    const placemark = placemarks[i];
+                    const name = placemark.getElementsByTagName('name')[0]?.textContent || `Region ${i + 1}`;
+                    
+                    // Parse coordinates from different geometry types
+                    const coordinates = this.extractCoordinates(placemark);
+                    
+                    if (coordinates.length > 0) {
+                        regions.push({
+                            name: name,
+                            filename: filename,
+                            coordinates: coordinates,
+                            layer: null,
+                            originalStyle: {
+                                color: '#3388ff',
+                                weight: 2,
+                                opacity: 0.8,
+                                fillOpacity: 0.1
+                            }
+                        });
+                    }
+                }
+                
+                return regions;
+            }
+            
+            extractCoordinates(placemark) {
+                const coordinates = [];
+                
+                // Check for Polygon
+                const polygons = placemark.getElementsByTagName('Polygon');
+                for (let polygon of polygons) {
+                    const outerBoundary = polygon.getElementsByTagName('outerBoundaryIs')[0];
+                    if (outerBoundary) {
+                        const linearRing = outerBoundary.getElementsByTagName('LinearRing')[0];
+                        if (linearRing) {
+                            const coordsText = linearRing.getElementsByTagName('coordinates')[0]?.textContent;
+                            if (coordsText) {
+                                const coords = this.parseCoordinateString(coordsText);
+                                if (coords.length > 0) {
+                                    coordinates.push(coords);
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Check for LineString
+                const lineStrings = placemark.getElementsByTagName('LineString');
+                for (let lineString of lineStrings) {
+                    const coordsText = lineString.getElementsByTagName('coordinates')[0]?.textContent;
+                    if (coordsText) {
+                        const coords = this.parseCoordinateString(coordsText);
+                        if (coords.length > 0) {
+                            coordinates.push(coords);
+                        }
+                    }
+                }
+                
+                return coordinates;
+            }
+            
+            parseCoordinateString(coordsText) {
+                return coordsText.trim().split(/\s+/).map(coord => {
+                    const parts = coord.split(',');
+                    if (parts.length >= 2) {
+                        const lng = parseFloat(parts[0]);
+                        const lat = parseFloat(parts[1]);
+                        if (!isNaN(lat) && !isNaN(lng)) {
+                            return [lat, lng];
+                        }
+                    }
+                    return null;
+                }).filter(coord => coord !== null);
+            }
+            
+            displayRegions() {
+                this.regions.forEach((region, index) => {
+                    if (region.coordinates.length > 0) {
+                        // Create polygon or polyline based on coordinate structure
+                        if (region.coordinates[0].length > 2) {
+                            // Polygon
+                            region.layer = L.polygon(region.coordinates, region.originalStyle).addTo(this.map);
+                        } else {
+                            // LineString
+                            region.layer = L.polyline(region.coordinates, region.originalStyle).addTo(this.map);
+                        }
+                        
+                        region.layer.bindPopup(`<b>${region.name}</b><br>From: ${region.filename}`);
+                    }
+                });
+                
+                // Fit map to show all regions
+                if (this.regions.length > 0) {
+                    const group = new L.featureGroup(this.regions.map(r => r.layer).filter(l => l));
+                    this.map.fitBounds(group.getBounds().pad(0.1));
+                }
+            }
+            
+            clearMap() {
+                this.map.eachLayer((layer) => {
+                    if (layer instanceof L.Polygon || layer instanceof L.Polyline) {
+                        this.map.removeLayer(layer);
+                    }
+                });
+            }
+            
+            updateUI() {
+                document.getElementById('regionCount').textContent = this.regions.length;
+                document.getElementById('startAnimation').disabled = this.regions.length === 0 || this.isAnimating;
+                document.getElementById('stopAnimation').disabled = !this.isAnimating;
+                
+                // Update region list
+                const regionList = document.getElementById('regionList');
+                regionList.innerHTML = '';
+                
+                this.regions.forEach((region, index) => {
+                    const div = document.createElement('div');
+                    div.className = 'region-item';
+                    div.textContent = `${index + 1}. ${region.name}`;
+                    div.id = `region-item-${index}`;
+                    regionList.appendChild(div);
+                });
+            }
+            
+            async startAnimation() {
+                if (this.isAnimating || this.regions.length === 0) return;
+                
+                this.isAnimating = true;
+                this.updateUI();
+                
+                const blinkSpeed = parseInt(document.getElementById('blinkSpeed').value);
+                const holdDuration = parseInt(document.getElementById('holdDuration').value);
+                const highlightColor = document.getElementById('highlightColor').value;
+                const lineWidth = parseInt(document.getElementById('lineWidth').value);
+                
+                // Animation sequence: individual regions, then all together
+                const totalSteps = this.regions.length + 1;
+                
+                // Animate each region individually
+                for (let i = 0; i < this.regions.length; i++) {
+                    if (!this.isAnimating) break;
+                    
+                    this.currentRegionIndex = i;
+                    document.getElementById('currentRegion').textContent = this.regions[i].name;
+                    
+                    // Show region name overlay
+                    this.showRegionName(this.regions[i].name, true);
+                    
+                    // Update progress
+                    const progress = ((i + 1) / totalSteps) * 100;
+                    document.getElementById('progressFill').style.width = `${progress}%`;
+                    
+                    // Highlight current region in list
+                    document.querySelectorAll('.region-item').forEach(item => item.classList.remove('active'));
+                    document.getElementById(`region-item-${i}`).classList.add('active');
+                    
+                    await this.blinkRegion(this.regions[i], blinkSpeed, holdDuration, highlightColor, lineWidth);
+                    
+                    // Hide region name overlay
+                    this.showRegionName('', false);
+                }
+                
+                // Final animation: all regions together
+                if (this.isAnimating) {
+                    document.getElementById('currentRegion').textContent = 'All Regions';
+                    document.getElementById('progressFill').style.width = '100%';
+                    
+                    // Show "All Regions" overlay
+                    this.showRegionName('🌟 All Regions 🌟', true);
+                    
+                    // Highlight all regions in list
+                    document.querySelectorAll('.region-item').forEach(item => item.classList.add('active'));
+                    
+                    await this.blinkAllRegions(blinkSpeed, holdDuration, highlightColor, lineWidth);
+                    
+                    // Hide overlay
+                    this.showRegionName('', false);
+                }
+                
+                this.stopAnimation();
+            }
+            
+            async blinkRegion(region, blinkSpeed, holdDuration, highlightColor, lineWidth) {
+                if (!region.layer) return;
+                
+                const originalStyle = region.originalStyle;
+                const highlightStyle = {
+                    color: highlightColor,
+                    weight: lineWidth,
+                    opacity: 1,
+                    fillOpacity: 0.3
+                };
+                
+                // Blink effect
+                const blinkCount = Math.floor(holdDuration / blinkSpeed);
+                for (let i = 0; i < blinkCount && this.isAnimating; i++) {
+                    region.layer.setStyle(highlightStyle);
+                    await this.sleep(blinkSpeed / 2);
+                    
+                    if (this.isAnimating) {
+                        region.layer.setStyle(originalStyle);
+                        await this.sleep(blinkSpeed / 2);
+                    }
+                }
+                
+                // Keep highlighted for remaining time
+                if (this.isAnimating) {
+                    region.layer.setStyle(highlightStyle);
+                    await this.sleep(holdDuration % blinkSpeed);
+                    region.layer.setStyle(originalStyle);
+                }
+            }
+            
+            async blinkAllRegions(blinkSpeed, holdDuration, highlightColor, lineWidth) {
+                const highlightStyle = {
+                    color: highlightColor,
+                    weight: lineWidth,
+                    opacity: 1,
+                    fillOpacity: 0.3
+                };
+                
+                // Blink all regions simultaneously
+                const blinkCount = Math.floor(holdDuration / blinkSpeed);
+                for (let i = 0; i < blinkCount && this.isAnimating; i++) {
+                    this.regions.forEach(region => {
+                        if (region.layer) region.layer.setStyle(highlightStyle);
+                    });
+                    await this.sleep(blinkSpeed / 2);
+                    
+                    if (this.isAnimating) {
+                        this.regions.forEach(region => {
+                            if (region.layer) region.layer.setStyle(region.originalStyle);
+                        });
+                        await this.sleep(blinkSpeed / 2);
+                    }
+                }
+                
+                // Final highlight
+                if (this.isAnimating) {
+                    this.regions.forEach(region => {
+                        if (region.layer) region.layer.setStyle(highlightStyle);
+                    });
+                    await this.sleep(holdDuration % blinkSpeed);
+                    this.regions.forEach(region => {
+                        if (region.layer) region.layer.setStyle(region.originalStyle);
+                    });
+                }
+            }
+            
+            stopAnimation() {
+                this.isAnimating = false;
+                this.currentRegionIndex = -1;
+                
+                // Reset all styles
+                this.regions.forEach(region => {
+                    if (region.layer) {
+                        region.layer.setStyle(region.originalStyle);
+                    }
+                });
+                
+                // Reset UI
+                document.getElementById('currentRegion').textContent = 'None';
+                document.getElementById('progressFill').style.width = '0%';
+                document.querySelectorAll('.region-item').forEach(item => item.classList.remove('active'));
+                
+                this.updateUI();
+            }
+            
+            resetView() {
+                if (this.regions.length > 0) {
+                    const group = new L.featureGroup(this.regions.map(r => r.layer).filter(l => l));
+                    this.map.fitBounds(group.getBounds().pad(0.1));
+                } else {
+                    this.map.setView([20, 0], 2);
+                }
+            }
+            
+            sleep(ms) {
+                return new Promise(resolve => setTimeout(resolve, ms));
+            }
+        }
+        
+        // Initialize the application
+        const animator = new KMLRegionAnimator();
+    </script>
+</body>
+</html>
